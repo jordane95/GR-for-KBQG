@@ -279,7 +279,7 @@ def reina_offline(data_path, key, value, num_proc):
         if set_name not in datasets_new: continue
 
         print('REINA for ' + set_name)
-        with open(os.path.join(data_path, 'reina' + set_name + '.json'), 'w', encoding='utf8') as fpw:
+        with open(os.path.join(data_path, 'reina' + set_name + '.json'), 'w') as fpw:
             json.dump(datasets_new[set_name], fpw)
 
 
