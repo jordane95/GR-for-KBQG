@@ -372,11 +372,11 @@ def load_g2s_dataset(data_path):
 
     # TODO: convert 'kbs' field to 'graph' field
     g2s_datasets = {}
-    with open(data_path+"train.json", 'r') as f:
+    with open(os.path.join(data_path, "train.json"), 'r') as f:
         train_set = json.load(f)
-    with open(data_path+"dev.json", 'r') as f:
+    with open(os.path.join(data_path, "dev.json"), 'r') as f:
         dev_set = json.load(f)
-    with open(data_path+"test.json", 'r') as f:
+    with open(os.path.join(data_path, "test.json"), 'r') as f:
         test_set = json.load(f)
 
     g2s_datasets['train'] = list(map(linearize_graph, train_set))
