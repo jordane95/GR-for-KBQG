@@ -366,7 +366,7 @@ def load_g2s_dataset(data_path):
 
         total_entity = mark_entity + text_entity
         
-        entry['graph'] = " ".join(total_entity + text_relation)
+        entry['kg'] = " ".join(total_entity + text_relation)
 
         return entry
 
