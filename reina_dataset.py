@@ -327,25 +327,43 @@ class WikidataDataset(Dataset):
 
     # Acquire the masked text
     def text_mask(self, word, word_cnt, p=0.15):
+        """Word level masking
+
+        Args:
+            word (str): word
+            word_cnt (int): word index
+            p (float): mask probability
+        Returns:
+            word_label (List[int]): list of token ids for word
+            word_laebl_token (str): same as `word`
+            word_input (List[int]): masked token ids
+            word_input_token (str): string representation for `word_input`
+            word_whole (List[int]): [word_cnt] * len(word_label)
+        """
         if len(word) == 0:
             return [], '', [], '', []
 
-        word_label = self.tokenizer.encode(" {}".format(word), add_special_tokens=False)
+        word_label = self.tokenizer.encode(" {}".format(word), add_special_tokens=False) # List[int], token ids
         word_whole = [word_cnt] * len(word_label)
         word_label_token = copy.deepcopy(word)
 
-        if random.random() > p:
+        if random.random() > p: # no mask with probability of 1-p
             word_input = copy.deepcopy(word_label)
             word_input_token = copy.deepcopy(word_label_token)
         else:
             step_prob = random.random()
             if step_prob < 0.8:
+                # p = 0.8
+                # mask the whole word, replace it with [MASK] token
                 word_input = [self.mask_token_id] * len(word_label)
                 word_input_token = ' '.join([self.mask_token] * len(word_label))
             else:
                 if step_prob < 0.9:
+                    # p = 0.1
+                    # replace the first token with a random token in vocab, the following remain [MASK]
                     replace_word = [random.randint(0, self.tokenizer.vocab_size - 1)]
                     replace_word_token = [self.tokenizer.convert_ids_to_tokens(replace_word[0])]
+                    # len(replace_word) == 1
                     if len(word_label) >= len(replace_word):
                         word_input = replace_word + [self.mask_token_id] * (len(word_label) - len(replace_word))
                         word_input_token = ' '.join(
@@ -354,15 +372,33 @@ class WikidataDataset(Dataset):
                         word_input = replace_word[:len(word_label)]
                         word_input_token = ' '.join(replace_word_token[:len(word_label)])
                 else:
+                    # p = 0.1
+                    # do not mask
                     word_input = copy.deepcopy(word_label)
                     word_input_token = copy.deepcopy(word_label_token)
 
         return word_label, word_label_token, word_input, word_input_token, word_whole
 
     def truncate_pair_ar(self, a, b, add_bos_id, graph_ids, text_ids, node_ids, edge_ids):
+        """
+
+        Args:
+            a (List[int]): input linearized graph token ids
+            b (List[int]): masked text token ids, as input corrputed text, after postprocessing by removing sucessive [MASK] tokens
+            add_bos_ids (List[int]): 0/1/2 bos token ids
+            graph_ids (List[int]): token ids for [graph]
+            text_ids (List[int]): token ids for [text]
+            node_ids (List[int]): node index of the linearized graph
+            edge_ids (List[int]): edge index of the linearized graph
+        Returns:
+            input_ids (List[int]): add_bos_id + graph_ids + a + text_ids + b + eos_token_id
+            attn_mask (List[int]):
+            input_node_ids (List[int]):
+            input_edge_ids (List[int]):
+        """
         # add_bos_id + graph_ids + a + text_ids + b + eos_token_id
-        length_a_b = self.args.max_input_length - len(add_bos_id) - len(graph_ids) - len(text_ids) - 1
-        if len(a) + len(b) > length_a_b:
+        length_a_b = self.args.max_input_length - len(add_bos_id) - len(graph_ids) - len(text_ids) - 1 # 1 for eos
+        if len(a) + len(b) > length_a_b: # trunction
             a = a[:(length_a_b - len(b))]
             node_ids = node_ids[:(length_a_b - len(b))]
             edge_ids = edge_ids[:(length_a_b - len(b))]
@@ -420,12 +456,33 @@ class WikidataDataset(Dataset):
     # TODO: adapt this for retrieval enhanced generation
     # Prepare data for text reconstruction
     def ar_prep_data(self, answers_input, answers, questions, add_bos_id, graph_ids, text_ids, node_ids, edge_ids):
+        """
+
+        Args:
+            answers_input (List[int]): masked text token ids, as input corrputed text
+            answers (List[int]): original whole text token ids, as target labels
+            questions (List[int]): input linearized graph token ids
+            add_bos_ids (List[int]): 0/1/2 bos token ids
+            graph_ids (List[int]): token ids for [graph]
+            text_ids (List[int]): token ids for [text]
+            node_ids (List[int]): node index of the linearized graph
+            edge_ids (List[int]): edge index of the linearized graph
+        Returns:
+            input_ids
+            input_attn_mask
+            decoder_label_ids
+            decoder_attn_mask
+            input_node_ids
+            input_edge_ids
+        """
         # merge mask in answers_input
         text_pertubed_input = []
         for data_id in range(len(answers_input)):
             if len(text_pertubed_input) == 0:
                 text_pertubed_input.append(answers_input[data_id])
             else:
+                # avoid consecutive [MASK] tokens
+                # if encoutered 2 [MASK] tokens, skip to the next
                 if answers_input[data_id] != self.mask_token_id:
                     text_pertubed_input.append(answers_input[data_id])
                 else:
@@ -434,12 +491,12 @@ class WikidataDataset(Dataset):
 
         # add bos and eos
         decoder_label_ids = copy.deepcopy(answers)
-        if len(decoder_label_ids) > self.args.max_output_length - len(add_bos_id) - 1:
+        if len(decoder_label_ids) > self.args.max_output_length - len(add_bos_id) - 1: # trunction
             decoder_label_ids = decoder_label_ids[:(self.args.max_output_length - len(add_bos_id) - 1)]
-        decoder_label_ids = add_bos_id + decoder_label_ids + [self.tokenizer.eos_token_id]
-        decoder_attn_mask = [1] * len(decoder_label_ids) + [0] * (self.args.max_output_length - len(decoder_label_ids))
-        decoder_label_ids += [self.tokenizer.pad_token_id] * (self.args.max_output_length - len(decoder_label_ids))
-        assert len(decoder_label_ids) == self.args.max_output_length
+        decoder_label_ids = add_bos_id + decoder_label_ids + [self.tokenizer.eos_token_id] # add bos and eos
+        decoder_attn_mask = [1] * len(decoder_label_ids) + [0] * (self.args.max_output_length - len(decoder_label_ids)) # mask
+        decoder_label_ids += [self.tokenizer.pad_token_id] * (self.args.max_output_length - len(decoder_label_ids)) # padding
+        assert len(decoder_label_ids) == self.args.max_output_length # assure that all examples are padded to the same length
         assert len(decoder_label_ids) == len(decoder_attn_mask)
 
         input_ids, input_attn_mask, input_node_ids, input_edge_ids = self.truncate_pair_ar(questions,
@@ -574,15 +631,17 @@ class WikidataDataset(Dataset):
         # words_whole_ids: word index
 
         words_label_ids, words_label_tokens, words_input_ids, words_input_tokens, words_whole_ids = [], '', [], '', []
+        # sentence level
 
         word_cnt = 0
         for word in entry['text']:
             if word not in total_entity:
+                # word level
                 word_label_ids, word_label_tokens, word_input_ids, word_input_tokens, word_whole_ids = \
-                    self.text_mask(word, word_cnt, p=self.mask_prob[4])
+                    self.text_mask(word, word_cnt, p=self.mask_prob[4]) # for 'text'
             else:
                 word_label_ids, word_label_tokens, word_input_ids, word_input_tokens, word_whole_ids = \
-                    self.text_mask(word, word_cnt, p=self.mask_prob[3])
+                    self.text_mask(word, word_cnt, p=self.mask_prob[3]) # for 'text(entity)'
 
             words_label_ids += word_label_ids
             words_label_tokens += ' ' + word_label_tokens
@@ -594,9 +653,12 @@ class WikidataDataset(Dataset):
 
         assert len(words_input_ids) == len(words_label_ids) == len(words_whole_ids)
 
+        # We focus on ar
         input_ids_ar, attn_mask_ar, decoder_label_ids, decoder_attn_mask, input_node_ids_ar, input_edge_ids_ar = \
             self.ar_prep_data(words_input_ids, words_label_ids, strings_label, self.add_bos_id, self.graph_ids,
                               self.text_ids, node_ids, edge_ids)
+        
+        
         input_ids_ae, attn_mask_ae, encoder_label_ids, input_node_ids_ae, input_edge_ids_ae = \
             self.ae_prep_data(strings, strings_label, words_label_ids, self.add_bos_id, self.graph_ids,
                               self.text_ids, node_ids, edge_ids)
@@ -925,17 +987,33 @@ class WebNLGDataset(Dataset):
                                                                       add_special_tokens=False)
 
         return ent_change, rel_change
+    
+    def truncate_pair_ar(self, a, b, add_bos_id, graph_ids, text_ids, node_ids, edge_ids):
+        """
 
-    def truncate_pair_ar(self, a, add_bos_id, graph_ids, text_ids, node_ids, edge_ids):
+        Args:
+            a (List[int]): input linearized graph token ids
+            b (List[int]): masked text token ids, as input corrputed text, after postprocessing by removing sucessive [MASK] tokens
+            add_bos_ids (List[int]): 0/1/2 bos token ids
+            graph_ids (List[int]): token ids for [graph]
+            text_ids (List[int]): token ids for [text]
+            node_ids (List[int]): node index of the linearized graph
+            edge_ids (List[int]): edge index of the linearized graph
+        Returns:
+            input_ids (List[int]): add_bos_id + graph_ids + a + text_ids + b + eos_token_id
+            attn_mask (List[int]):
+            input_node_ids (List[int]):
+            input_edge_ids (List[int]):
+        """
         # add_bos_id + graph_ids + a + text_ids + b + eos_token_id
-        length_a_b = self.args.max_input_length - len(add_bos_id) - len(graph_ids) - len(text_ids) - 1
-        if len(a) > length_a_b:
-            a = a[:length_a_b]
-            node_ids = node_ids[:length_a_b]
-            edge_ids = edge_ids[:length_a_b]
-        input_ids = add_bos_id + graph_ids + a + text_ids + [self.tokenizer.eos_token_id]
-        input_node_ids = [-1] * (len(add_bos_id) + len(graph_ids)) + node_ids + [-1] * (len(text_ids) + 1)
-        input_edge_ids = [-1] * (len(add_bos_id) + len(graph_ids)) + edge_ids + [-1] * (len(text_ids) + 1)
+        length_a_b = self.args.max_input_length - len(add_bos_id) - len(graph_ids) - len(text_ids) - 1 # 1 for eos
+        if len(a) + len(b) > length_a_b: # trunction
+            a = a[:(length_a_b - len(b))]
+            node_ids = node_ids[:(length_a_b - len(b))]
+            edge_ids = edge_ids[:(length_a_b - len(b))]
+        input_ids = add_bos_id + graph_ids + a + text_ids + b + [self.tokenizer.eos_token_id]
+        input_node_ids = [-1] * (len(add_bos_id) + len(graph_ids)) + node_ids + [-1] * (len(text_ids) + len(b) + 1)
+        input_edge_ids = [-1] * (len(add_bos_id) + len(graph_ids)) + edge_ids + [-1] * (len(text_ids) + len(b) + 1)
         attn_mask = [1] * len(input_ids) + [0] * (self.args.max_input_length - len(input_ids))
         input_ids += [self.tokenizer.pad_token_id] * (self.args.max_input_length - len(input_ids))
         input_node_ids += [-1] * (self.args.max_input_length - len(input_node_ids))
@@ -944,10 +1022,11 @@ class WebNLGDataset(Dataset):
             input_edge_ids)
         return input_ids, attn_mask, input_node_ids, input_edge_ids
 
-    def ar_prep_data(self, answers, questions, add_bos_id, graph_ids, text_ids, node_ids, edge_ids):
+    def ar_prep_data(self, references, answers, questions, add_bos_id, graph_ids, text_ids, node_ids, edge_ids):
         """
 
         Args:
+            references (List[int]): retrieved reference texts
             answers (List[int]): token ids for every word in target sequence
             questions (List[int]): token ids for every entity in source graph
             add_bos_id (List[int]): 0/1/2 bos token ids
@@ -971,7 +1050,7 @@ class WebNLGDataset(Dataset):
         decoder_label_ids += [self.tokenizer.pad_token_id] * (self.args.max_output_length - len(decoder_label_ids))
         assert len(decoder_label_ids) == self.args.max_output_length == len(decoder_attn_mask)
 
-        input_ids, input_attn_mask, input_node_ids, input_edge_ids = self.truncate_pair_ar(questions, add_bos_id,
+        input_ids, input_attn_mask, input_node_ids, input_edge_ids = self.truncate_pair_ar(questions, references, add_bos_id,
                                                                                            graph_ids, text_ids,
                                                                                            node_ids, edge_ids)
 
@@ -1054,7 +1133,8 @@ class WebNLGDataset(Dataset):
             strings_label_tokens += string_label_tokens
             node_ids += nodes
             edge_ids += edges
-
+        
+        # for target text
         words_label_ids, words_label_tokens, words_input_ids, words_input_tokens = [], '', [], ''
         current_text = random.choice(entry['text']) # entry['text'] is a list, but in wq and pq, it's of length 1, only in webnlg it's multiple sentences
 
@@ -1064,15 +1144,28 @@ class WebNLGDataset(Dataset):
 
             words_label_ids += word_label_ids
             words_label_tokens += ' ' + word_label_tokens
+        
+        # for retrieved references
+        refs_label_ids, refs_label_tokens = [], ''
+        ref_text = entry['ref'] # str
+
+        for word in ref_text.split():
+            word_label_ids = self.tokenizer.encode(" {}".format(word), add_special_tokens=False)
+            word_label_tokens = copy.deepcopy(word)
+
+            refs_label_ids += word_label_ids
+            refs_label_tokens += ' ' + word_label_tokens
+        
 
         input_ids_ar, attn_mask_ar, decoder_label_ids, decoder_attn_mask, input_node_ids_ar, input_edge_ids_ar = \
-            self.ar_prep_data(words_label_ids, strings_label, self.add_bos_id, self.graph_ids,
+            self.ar_prep_data(refs_label_ids, words_label_ids, strings_label, self.add_bos_id, self.graph_ids,
                               self.text_ids, node_ids, edge_ids)
 
         node_length_ar = max(input_node_ids_ar) + 1
         edge_length_ar = max(input_edge_ids_ar) + 1
 
         def masked_fill(src, masked_value, fill_value):
+            """Replace masked_value and beyond fill_value with fill_value"""
             return [src[src_id] if src[src_id] != masked_value and src[src_id] < fill_value else fill_value for src_id
                     in range(len(src))]
 

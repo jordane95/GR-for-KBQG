@@ -153,7 +153,7 @@ class MyMemLucene():
                 except:
                     continue
 
-            instance = ' '.join(output[:docs_num])
+            instance = output[:docs_num]
             output_all.append(instance)
 
         return output_all
