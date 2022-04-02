@@ -38,7 +38,7 @@ hypotheses = []
 
 for entry in data:
     target_text = entry['text']
-    retrieved_text = [entry['ref'][0]]
+    retrieved_text = [entry['ref'][0] if len(entry['ref']) == 0 else ""]
     hyp, ref = postprocess_text(retrieved_text, target_text)
 
     hypotheses.extend(hyp)
