@@ -197,7 +197,9 @@ def reina_apply(raw_datasets, key, value, num_proc):
     # adapt to the APIs provided for huggingface Dataset object
     index_data_list = dict()
     index_data_list[key] = [entry[key] for entry in train_set]
-    index_data_list[value] = [entry[value] for entry in train_set]
+
+    # entry['text'] is a list of str
+    index_data_list[value] = [entry[value][0] for entry in train_set]
 
     query_data_dict = {k:v for k, v in raw_datasets.items()} # size of 3
     datasets_new = defaultdict(dict)
