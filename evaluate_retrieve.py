@@ -11,6 +11,10 @@ from nltk.translate.bleu_score import corpus_bleu
 parser = argparse.ArgumentParser(description="Script to evaluate the performance of purely retrieval method.")
 parser.add_argument("--data_path", type=str, default="data/wq", help="Path to the dataset containing retrieved texts.")
 
+
+args = parser.parse_args()
+
+
 def postprocess_text(preds, labels):
     """Batch-level postprocessing
     """
