@@ -59,9 +59,9 @@ new_dev_set = [{**entry, 'refs': refs} for entry, refs in zip(dev_set, refs_dev)
 new_test_set = [{**entry, 'refs': refs} for entry, refs in zip(test_set, refs_test)]
 
 # save the retrieval augmented dataset to disk
-with open(os.path.join(args.data_path, 'sbert-train.json'), 'w') as fpw:
+with open(os.path.join(args.data_path, 'sbert_train.json'), 'w') as fpw:
     json.dump(new_train_set, fpw)
-with open(os.path.join(args.data_path, 'sbert-dev.json'), 'w') as fpw:
+with open(os.path.join(args.data_path, 'sbert_dev.json'), 'w') as fpw:
     json.dump(new_dev_set, fpw)
-with open(os.path.join(args.data_path, 'sbert-test.json'), 'w') as fpw:
+with open(os.path.join(args.data_path, 'sbert_test.json'), 'w') as fpw:
     json.dump(new_test_set, fpw)
