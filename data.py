@@ -1146,8 +1146,9 @@ class WebNLGDataset(Dataset):
             words_label_tokens += ' ' + word_label_tokens
         
         # for retrieved references
+        k = 5
         refs_label_ids, refs_label_tokens = [], ''
-        ref_text = entry['ref'] # str
+        ref_text = " ".join(entry['refs'][:k]) # str
 
         for word in ref_text.split():
             word_label_ids = self.tokenizer.encode(" {}".format(word), add_special_tokens=False)

@@ -228,7 +228,7 @@ def reina_apply(raw_datasets, key, value, num_proc):
             qbar.update(len(lines_ir))
 
         qbar.close()
-        datasets_new[set_name] = [{**entry, 'ref': ref} for entry, ref in zip(query_data, lines_reina)]
+        datasets_new[set_name] = [{**entry, 'refs': refs} for entry, refs in zip(query_data, lines_reina)]
     return datasets_new
 
 def reina(raw_datasets, key, value, use_cache, num_proc=10):
