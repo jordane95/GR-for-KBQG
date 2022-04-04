@@ -29,7 +29,7 @@ def postprocess_text(preds, labels):
     return preds, labels
 
 
-with open(os.path.join(args.data_path, "reinatest.json"), 'r') as f:
+with open(os.path.join(args.data_path, "reina_test.json"), 'r') as f:
     data = json.load(f)
 
 
@@ -38,7 +38,7 @@ hypotheses = []
 
 for entry in data:
     target_text = entry['text']
-    retrieved_text = [entry['ref'][0] if len(entry['ref']) != 0 else ""]
+    retrieved_text = [entry['refs'][0] if len(entry['refs']) != 0 else ""]
     hyp, ref = postprocess_text(retrieved_text, target_text)
 
     hypotheses.extend(hyp)
