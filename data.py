@@ -1008,7 +1008,9 @@ class WebNLGDataset(Dataset):
         # add_bos_id + graph_ids + a + text_ids + b + eos_token_id
         length_a_b = self.args.max_input_length - len(add_bos_id) - len(graph_ids) - len(text_ids) - 1 # 1 for eos
         if len(a) + len(b) > length_a_b: # trunction
-            b = b[:(length_a_b - len(a))]
+            a = a[:(length_a_b - len(b))]
+            node_ids = node_ids[:(length_a_b - len(b))]
+            edge_ids = edge_ids[:(length_a_b - len(b))]
         input_ids = add_bos_id + graph_ids + a + text_ids + b + [self.tokenizer.eos_token_id]
         input_node_ids = [-1] * (len(add_bos_id) + len(graph_ids)) + node_ids + [-1] * (len(text_ids) + len(b) + 1)
         input_edge_ids = [-1] * (len(add_bos_id) + len(graph_ids)) + edge_ids + [-1] * (len(text_ids) + len(b) + 1)
