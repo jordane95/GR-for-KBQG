@@ -993,7 +993,7 @@ class WebNLGDataset(Dataset):
 
         Args:
             a (List[int]): input linearized graph token ids
-            b (List[int]): masked text token ids, as input corrputed text, after postprocessing by removing sucessive [MASK] tokens
+            b (List[int]): retrieved references token ids
             add_bos_ids (List[int]): 0/1/2 bos token ids
             graph_ids (List[int]): token ids for [graph]
             text_ids (List[int]): token ids for [text]
@@ -1008,9 +1008,7 @@ class WebNLGDataset(Dataset):
         # add_bos_id + graph_ids + a + text_ids + b + eos_token_id
         length_a_b = self.args.max_input_length - len(add_bos_id) - len(graph_ids) - len(text_ids) - 1 # 1 for eos
         if len(a) + len(b) > length_a_b: # trunction
-            a = a[:(length_a_b - len(b))]
-            node_ids = node_ids[:(length_a_b - len(b))]
-            edge_ids = edge_ids[:(length_a_b - len(b))]
+            b = b[:(length_a_b - len(a))]
         input_ids = add_bos_id + graph_ids + a + text_ids + b + [self.tokenizer.eos_token_id]
         input_node_ids = [-1] * (len(add_bos_id) + len(graph_ids)) + node_ids + [-1] * (len(text_ids) + len(b) + 1)
         input_edge_ids = [-1] * (len(add_bos_id) + len(graph_ids)) + edge_ids + [-1] * (len(text_ids) + len(b) + 1)
@@ -1019,7 +1017,7 @@ class WebNLGDataset(Dataset):
         input_node_ids += [-1] * (self.args.max_input_length - len(input_node_ids))
         input_edge_ids += [-1] * (self.args.max_input_length - len(input_edge_ids))
         assert len(input_ids) == len(attn_mask) == self.args.max_input_length == len(input_node_ids) == len(
-            input_edge_ids)
+            input_edge_ids), f"{len(input_ids)} == {len(attn_mask)} == {self.args.max_input_length} == {len(input_node_ids)} == {len(input_edge_ids)}"
         return input_ids, attn_mask, input_node_ids, input_edge_ids
 
     def ar_prep_data(self, references, answers, questions, add_bos_id, graph_ids, text_ids, node_ids, edge_ids):
