@@ -1,3 +1,4 @@
+from transformers.configuration_bart import BartConfig
 from modeling_bart import PretrainedBartModel, BartStructureEncoder, _filter_out_falsey_values
 
 
