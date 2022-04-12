@@ -429,7 +429,7 @@ class BartStructureEncoder(nn.Module):
 
         # T x B x C -> B x T x C
         encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
-        x = x.transpose(0, 1)
+        x = x.transpose(0, 1) # [batch_size, seq_len, emb_dim]
 
         return x, encoder_states, all_attentions
 

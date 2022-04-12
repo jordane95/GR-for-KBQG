@@ -24,7 +24,6 @@ class NGRGraphEncoder(PretrainedBartModel):
         input_ids,
         attention_mask=None,
         encoder_outputs: Optional[Tuple] = None,
-        decoder_attention_mask=None,
         input_node_ids=None,
         input_edge_ids=None,
         node_length=None,
@@ -33,6 +32,14 @@ class NGRGraphEncoder(PretrainedBartModel):
         output_attentions=None,
         output_hidden_states=None,
     ):
+        """
+        Args:
+            input_ids:
+
+        Returns:
+            torch.Tensor: [batch_size, seq_len, emb_dim]
+            attention_mask: [batch_size, seq_len]
+        """
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -50,7 +57,7 @@ class NGRGraphEncoder(PretrainedBartModel):
 
         # Attention and hidden_states will be [] or None if they aren't needed
         encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
-        return encoder_outputs
+        return encoder_outputs[0][:, 0] # [graph] embedding for each input graph, [batch_size, emb_dim]
 
     def get_input_embeddings(self):
         return self.shared
