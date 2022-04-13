@@ -9,6 +9,8 @@ import argparse
 import logging
 
 import random
+
+from tqdm import tqdm, trange
 import numpy as np
 import torch
 
@@ -16,6 +18,8 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
 from transformers import AdamW, get_linear_schedule_with_warmup
+
+from transformers import BartTokenizer
 
 from graph_encoder import NGRGraphEncoder
 from sentence_transformers import SentenceTransformer
@@ -39,8 +43,11 @@ class Similarity(nn.Module):
 
 class BiGraphTextEncoder(nn.Module):
     def __init__(self, args):
+        super().__init__()
         self.graph_model = NGRGraphEncoder.from_pretrained(args.graph_model_name_or_path)
         self.sentence_model = SentenceTransformer(args.sentence_model_name_or_path)
+        for p in self.sentence_model.parameters():
+            p.requires_grad = False
 
         self.similarity = Similarity()
 
@@ -73,15 +80,14 @@ class BiGraphTextEncoder(nn.Module):
 def run(args, logger):
     tokenizer = BartTokenizer.from_pretrained(args.tokenizer_path)
 
-    train_dataset = WebNLGDataset(logger, args, args.data_path, tokenizer, "train")
-    dev_dataset = WebNLGDataset(logger, args, args.data_path, tokenizer, "val")
+    train_dataset = WebNLGDataset(logger, args, os.path.join(args.data_path, "train"), tokenizer, "train")
+    dev_dataset = WebNLGDataset(logger, args, os.path.join(args.data_path, "dev"), tokenizer, "val")
 
     train_dataloader = WebNLGDataLoader(args, train_dataset, "train")
     dev_dataloader = WebNLGDataLoader(args, dev_dataset, "val")
 
     # Load model parameters
     model = BiGraphTextEncoder(args)
-    print('model parameters: ', model.num_parameters())
 
     if args.n_gpu > 1:
         model = torch.nn.DataParallel(model)
@@ -159,7 +165,7 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
                     epoch))
                 train_losses = []
                 if best_accuracy < curr_em:
-                    model_to_save = model.module if hasattr(model, 'module') else model
+                    model_to_save = model.graph_model.module if hasattr(model.graph_model, 'module') else model.graph_model
                     model_to_save.save_pretrained(args.output_dir)
                     logger.info("Saving model with best %s: %.2f%% -> %.2f%% on epoch=%d, global_step=%d" %
                                 (dev_dataloader.dataset.metric, best_accuracy * 100.0, curr_em * 100.0, epoch, global_step))
@@ -194,7 +200,7 @@ def main():
     parser.add_argument(
         "--data_path",
         type=str,
-        default="data/wq"
+        default="data/wq",
         help="Path to the dataset."
     )
     parser.add_argument("--output_dir", default=None, type=str, required=True)
@@ -279,7 +285,7 @@ def main():
 
     # Start writing logs
 
-    log_filename = "{}log.txt".format("" if args.do_train else "eval_")
+    log_filename = "{}log.txt".format("")
 
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',

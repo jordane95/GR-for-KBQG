@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CUDA_VISIBLE_DEVICES=0,1 python train_graph_encoder.py \
+CUDA_VISIBLE_DEVICES=1 python train_graph_encoder.py \
     --output_dir out/jointgt_bart_wq \
     --train_batch_size 32 \
     --predict_batch_size 32 \
