@@ -176,7 +176,7 @@ class MultiprocessingEncoder(object):
         Returns:
             output ():
         """
-        output = mylc.retrieve_RAM( lines, 5, self.args['key'], self.args['value'] )
+        output = mylc.retrieve_RAM( lines, 20, self.args['key'], self.args['value'] )
         return output
 
 
