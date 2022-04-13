@@ -22,7 +22,6 @@ from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import BartTokenizer
 
 from graph_encoder import NGRGraphEncoder
-from sentence_transformers import SentenceTransformer
 
 from data import WebNLGDataset, WebNLGDataLoader
 
@@ -41,13 +40,12 @@ class Similarity(nn.Module):
         return self.cos(x, y) / self.temp
 
 
-class BiGraphTextEncoder(nn.Module):
+class BiGraphEncoder(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.graph_model = NGRGraphEncoder.from_pretrained(args.graph_model_name_or_path)
-        self.sentence_model = SentenceTransformer(args.sentence_model_name_or_path)
-        for p in self.sentence_model.parameters():
-            p.requires_grad = False
+
+        self.sentence_embeddings = torch.load()
 
         self.similarity = Similarity()
 
@@ -64,11 +62,6 @@ class BiGraphTextEncoder(nn.Module):
             adj_matrix=batch[8],
         )
         # [batch_size, graph_emb_size]
-        sentence_embeddings = self.sentence_model(
-            input_ids=batch[2],
-            attention_mask=batch[3]
-        )
-        # [batch_size, sentence_emb_size]
 
         graph_similarity_matrix = self.similarity(graph_embeddings, graph_embeddings) # [batch_size, batch_size]
         sentence_similarity_matrix = self.similarity(sentence_embeddings, sentence_embeddings)
