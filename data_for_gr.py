@@ -772,7 +772,7 @@ class WebNLGDataLoader(DataLoader):
 
 # Downstream dataset (webnlg, webquestions, pathquestions)
 # Most parts are similar to WikidataDataset
-class WebNLGDataset(Dataset):
+class WebNLGDatasetForGR(Dataset):
     def __init__(self, logger, args, data_path, tokenizer, mode):
         self.data_path = data_path # path to raw data file
         self.tokenizer = tokenizer # tokenizer to tokenize textual data
@@ -817,6 +817,14 @@ class WebNLGDataset(Dataset):
                 self.add_bos_id = [self.tokenizer.bos_token_id]
         else:
             self.add_bos_id = []
+        
+        # load corpus
+        self.corpus = {}
+        self.corpus_path = self.data_path.split('/')[:-1] + "/train.json"
+        with open(self.corpus_path, 'r') as f:
+            corpus_ = json.load(f)
+        for entry in corpus_:
+            self.corpus[entry['id']] = entry['kbs']
 
     def __len__(self):
         return len(self.data)
@@ -989,7 +997,7 @@ class WebNLGDataset(Dataset):
         return ent_change, rel_change
 
     def truncate_pair_ar(self, a, add_bos_id, graph_ids, text_ids, node_ids, edge_ids):
-        # add_bos_id + graph_ids + a + text_ids + b + eos_token_id
+        # add_bos_id + graph_ids + a + text_ids + eos_token_id
         length_a_b = self.args.max_input_length - len(add_bos_id) - len(graph_ids) - len(text_ids) - 1
         if len(a) > length_a_b:
             a = a[:length_a_b]
@@ -1005,50 +1013,12 @@ class WebNLGDataset(Dataset):
         assert len(input_ids) == len(attn_mask) == self.args.max_input_length == len(input_node_ids) == len(
             input_edge_ids)
         return input_ids, attn_mask, input_node_ids, input_edge_ids
-
-    def ar_prep_data(self, answers, questions, add_bos_id, graph_ids, text_ids, node_ids, edge_ids):
-        """
-
-        Args:
-            answers (List[int]): token ids for every word in target sequence
-            questions (List[int]): token ids for every entity in source graph
-            add_bos_id (List[int]): 0/1/2 bos token ids
-            graph_ids (List[int]): token ids for " [graph]"
-            text_ids (List[int]): token ids for " [text]"
-            node_ids (List[int]): node ids or -1, same length as questions
-            edge_ids (List[int]): edge ids or -1, same length as questions
-        Returns:
-
-        """
-        # add bos and eos
-        decoder_label_ids = copy.deepcopy(answers)
-
-        # trunction
-        if len(decoder_label_ids) > self.args.max_output_length - len(add_bos_id) - 1:
-            decoder_label_ids = decoder_label_ids[:(self.args.max_output_length - len(add_bos_id) - 1)]
-        
-        # add bos end eos
-        decoder_label_ids = add_bos_id + decoder_label_ids + [self.tokenizer.eos_token_id]
-        decoder_attn_mask = [1] * len(decoder_label_ids) + [0] * (self.args.max_output_length - len(decoder_label_ids))
-        decoder_label_ids += [self.tokenizer.pad_token_id] * (self.args.max_output_length - len(decoder_label_ids))
-        assert len(decoder_label_ids) == self.args.max_output_length == len(decoder_attn_mask)
-
-        input_ids, input_attn_mask, input_node_ids, input_edge_ids = self.truncate_pair_ar(questions, add_bos_id,
-                                                                                           graph_ids, text_ids,
-                                                                                           node_ids, edge_ids)
-
-        return input_ids, input_attn_mask, decoder_label_ids, decoder_attn_mask, input_node_ids, input_edge_ids
-
-    def __getitem__(self, idx):
-        """fetch a single data sample in the dataset"""
-
-        entry = self.data[idx] # Dict[str, ...]
-        # entry is a data sample in json file
-
+    
+    def linearize_kbs(self, kbs):
         entities = []
 
         # entry['kbs']: Dict[str, ...]
-        for _ in entry['kbs']:
+        for _ in kbs:
             entities.append(_) # _ is an integer index number starting from 0, in type string
         # entities = ['0', '1', '2']
 
@@ -1059,7 +1029,7 @@ class WebNLGDataset(Dataset):
 
         # mark_entity: entities with KB numbers which are important for this task
         # text_entity: entities without KB numbers but only with text, which are less important
-        mark_entity = [entry['kbs'][ele_entity][0] for ele_entity in entities] # ["none", "River Thames", "England"]
+        mark_entity = [kbs[ele_entity][0] for ele_entity in entities] # ["none", "River Thames", "England"]
         mark_entity_number = entities # ['0', '1', '2']
         
         text_entity, text_relation = self.get_all_entities_per_sample(mark_entity_number, mark_entity, entry) # list of str
@@ -1076,23 +1046,10 @@ class WebNLGDataset(Dataset):
         adj_matrix = [[-1] * (self.args.max_node_length + 1) for _ in range(self.args.max_node_length + 1)] # matrix of shape [max_node_len+1, max_node_len+1], full of -1 for now
 
         cnt_edge = 0
-
-        if 'title' in entry: # usually no
-            entity = self.knowledge[entry['title_kb_id']]
-
-            string_label, string_label_tokens, nodes, edges, cnt_edge, adj_matrix = self.linearize_v2(
-                entity,
-                entity_change,
-                self.head_ids,
-                self.rel_ids, self.tail_ids,
-                relation_change, cnt_edge, adj_matrix)
-
-            strings_label += string_label
-            strings_label_tokens += string_label_tokens
         
         # construct the knowledge graph
         for i, entity_id in enumerate(entities): # entities = ['0', '1', '2']
-            entity = entry['kbs'][entity_id]
+            entity = kbs[entity_id]
             """ entity = 
             [
                 "none",
@@ -1117,19 +1074,9 @@ class WebNLGDataset(Dataset):
             node_ids += nodes
             edge_ids += edges
 
-        words_label_ids, words_label_tokens, words_input_ids, words_input_tokens = [], '', [], ''
-        current_text = random.choice(entry['text']) # entry['text'] is a list, but in wq and pq, it's of length 1, only in webnlg it's multiple sentences
-
-        for word in current_text.split():
-            word_label_ids = self.tokenizer.encode(" {}".format(word), add_special_tokens=False)
-            word_label_tokens = copy.deepcopy(word)
-
-            words_label_ids += word_label_ids
-            words_label_tokens += ' ' + word_label_tokens
-
-        input_ids_ar, attn_mask_ar, decoder_label_ids, decoder_attn_mask, input_node_ids_ar, input_edge_ids_ar = \
-            self.ar_prep_data(words_label_ids, strings_label, self.add_bos_id, self.graph_ids,
-                              self.text_ids, node_ids, edge_ids)
+        input_ids, input_attn_mask, input_node_ids, input_edge_ids = self.truncate_pair_ar(questions, add_bos_id,
+                                                                                           graph_ids, text_ids,
+                                                                                           node_ids, edge_ids)
 
         node_length_ar = max(input_node_ids_ar) + 1
         edge_length_ar = max(input_edge_ids_ar) + 1
@@ -1154,20 +1101,35 @@ class WebNLGDataset(Dataset):
 
         assert len(input_ids_ar) == len(attn_mask_ar) == self.args.max_input_length == len(input_node_ids_ar) == len(
             input_edge_ids_ar)
-        assert len(decoder_label_ids) == len(decoder_attn_mask) == self.args.max_output_length
 
         input_ids_ar = torch.LongTensor(input_ids_ar)
         attn_mask_ar = torch.LongTensor(attn_mask_ar)
-        decoder_label_ids = torch.LongTensor(decoder_label_ids)
-        decoder_attn_mask = torch.LongTensor(decoder_attn_mask)
         input_node_ids_ar = torch.LongTensor(input_node_ids_ar)
         input_edge_ids_ar = torch.LongTensor(input_edge_ids_ar)
         node_length_ar = torch.LongTensor([node_length_ar])
         edge_length_ar = torch.LongTensor([edge_length_ar])
         adj_matrix_ar = torch.LongTensor(adj_matrix_ar)
 
-        return input_ids_ar, attn_mask_ar, decoder_label_ids, decoder_attn_mask, \
-               input_node_ids_ar, input_edge_ids_ar, node_length_ar, edge_length_ar, adj_matrix_ar, entry['id']
+        return input_ids_ar, attn_mask_ar, input_node_ids_ar, input_edge_ids_ar, node_length_ar, edge_length_ar, adj_matrix_ar
+
+    def __getitem__(self, idx):
+        """fetch a single data sample in the dataset"""
+
+        entry = self.data[idx] # Dict[str, ...]
+        # entry is a data sample in json file
+
+        input_ids_ar, attn_mask_ar, input_node_ids_ar, input_edge_ids_ar, node_length_ar, edge_length_ar, adj_matrix_ar = self.linearize_kbs(entry['kbs'])
+
+        # handling positive and negative kbs
+        pos_kbs_ids = entry['refs']
+        pos_kbs_id = random.choice(pos_kbs_ids)
+        pos_kbs = self.corpus[pos_kbs_id]
+
+        input_ids_pg, attn_mask_pg, input_node_ids_pg, input_edge_ids_pg, node_length_pg, edge_length_pg, adj_matrix_pg = self.linearize_kbs(pos_kbs)
+
+        return input_ids_ar, attn_mask_ar, input_node_ids_ar, input_edge_ids_ar, node_length_ar, edge_length_ar, adj_matrix_ar, \
+               input_ids_pg, attn_mask_pg, input_node_ids_pg, input_edge_ids_pg, node_length_pg, edge_length_pg, adj_matrix_pg
+
 
 
 def evaluate_bleu(data_ref, data_sys):

@@ -23,7 +23,7 @@ from transformers import BartTokenizer
 
 from graph_encoder import NGRGraphEncoder
 
-from data import WebNLGDataset, WebNLGDataLoader
+from data_for_gr import WebNLGDatasetForGR, WebNLGDataLoader
 
 
 class Similarity(nn.Module):
@@ -45,36 +45,46 @@ class BiGraphEncoder(nn.Module):
         super().__init__()
         self.graph_model = NGRGraphEncoder.from_pretrained(args.graph_model_name_or_path)
 
-        self.sentence_embeddings = torch.load()
-
         self.similarity = Similarity()
-
-        self.loss_fn = nn.MSELoss()
+        self.loss_fn = nn.CrossEntropyLoss()
     
     def forward(self, batch):
         graph_embeddings = self.graph_model(
             input_ids=batch[0],
             attention_mask=batch[1],
-            input_node_ids=batch[4],
-            input_edge_ids=batch[5],
-            node_length=batch[6],
-            edge_length=batch[7],
-            adj_matrix=batch[8],
+            input_node_ids=batch[2],
+            input_edge_ids=batch[3],
+            node_length=batch[4],
+            edge_length=batch[5],
+            adj_matrix=batch[6],
         )
         # [batch_size, graph_emb_size]
 
-        graph_similarity_matrix = self.similarity(graph_embeddings, graph_embeddings) # [batch_size, batch_size]
-        sentence_similarity_matrix = self.similarity(sentence_embeddings, sentence_embeddings)
+        pos_graph_embeddings = self.graph_model(
+            input_ids=batch[7],
+            attention_mask=batch[8],
+            input_node_ids=batch[9],
+            input_edge_ids=batch[10],
+            node_length=batch[11],
+            edge_length=batch[12],
+            adj_matrix=batch[13],
+        )
+        # [batch_size, graph_emb_size]
 
-        loss = self.loss_fn(graph_similarity_matrix, sentence_similarity_matrix)
+        graph_similarity = self.similarity(graph_embeddings, pos_graph_embeddings) # [batch_size, batch_size]
+        
+        batch_size = graph_similarity.size(0)
+        labels = torch.tensor(range(batch_size), dtype=torch.long, device=graph_similarity.device)
+
+        loss = self.loss_fn(graph_similarity, labels)
         return loss
 
 
 def run(args, logger):
     tokenizer = BartTokenizer.from_pretrained(args.tokenizer_path)
 
-    train_dataset = WebNLGDataset(logger, args, os.path.join(args.data_path, "train"), tokenizer, "train")
-    dev_dataset = WebNLGDataset(logger, args, os.path.join(args.data_path, "dev"), tokenizer, "val")
+    train_dataset = WebNLGDatasetForGR(logger, args, os.path.join(args.data_path, "sbert_train_for_graph_retrieval"), tokenizer, "train")
+    dev_dataset = WebNLGDatasetForGR(logger, args, os.path.join(args.data_path, "sbert_dev_for_graph_retrieval"), tokenizer, "val")
 
     train_dataloader = WebNLGDataLoader(args, train_dataset, "train")
     dev_dataloader = WebNLGDataLoader(args, dev_dataset, "val")
@@ -158,7 +168,7 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
                     epoch))
                 train_losses = []
                 if best_accuracy < curr_em:
-                    model_to_save = model.graph_model.module if hasattr(model.graph_model, 'module') else model.graph_model
+                    model_to_save = model.module if hasattr(model, 'module') else model
                     model_to_save.save_pretrained(args.output_dir)
                     logger.info("Saving model with best %s: %.2f%% -> %.2f%% on epoch=%d, global_step=%d" %
                                 (dev_dataloader.dataset.metric, best_accuracy * 100.0, curr_em * 100.0, epoch, global_step))
@@ -176,14 +186,14 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
 
 
 def evaluate(model, dev_dataloader, tokenizer, args, logger, save_predictions=False):
-    megative_mse = 0
+    neg_loss = 0
     # Inference on the test set
     for i, batch in enumerate(dev_dataloader):
         if torch.cuda.is_available():
             batch = [b.to(torch.device("cuda")) for b in batch]
-        mse_loss = model(batch)
-        negative_mse -= mse_loss
-    return negative_mse
+        loss = model(batch)
+        neg_loss -= loss
+    return neg_loss
 
 
 def main():
