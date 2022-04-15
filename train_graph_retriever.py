@@ -90,7 +90,7 @@ def run(args, logger):
     dev_dataloader = WebNLGDataLoader(args, dev_dataset, "val")
 
     # Load model parameters
-    model = BiGraphTextEncoder(args)
+    model = BiGraphEncoder(args)
 
     if args.n_gpu > 1:
         model = torch.nn.DataParallel(model)
