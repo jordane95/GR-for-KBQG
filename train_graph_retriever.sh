@@ -1,7 +1,7 @@
 #!/bin/bash
 
 CUDA_VISIBLE_DEVICES=0 python train_graph_retriever.py \
-    --output_dir out/jointgt_bart_wq \
+    --output_dir retriever/bart_wq \
     --train_batch_size 16 \
     --predict_batch_size 32 \
     --max_input_length 256 \
