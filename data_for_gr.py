@@ -907,7 +907,7 @@ class WebNLGDatasetForGR(Dataset):
         # adj_matrix records the edge between head and tail entities
         return string_label, string_label_tokens, nodes, edges, cnt_edge, adj_matrix
 
-    def get_all_entities_per_sample(self, mark_entity_number, mark_entity, entry):
+    def get_all_entities_per_sample(self, mark_entity_number, mark_entity, kbs):
         """Get all textual entities and relations in the entry sample, excluding mark_entity
 
         Args:
@@ -921,7 +921,7 @@ class WebNLGDatasetForGR(Dataset):
         text_entity = set()
         text_relation = set()
         for entity_id in mark_entity_number:
-            entity = entry['kbs'][entity_id] # a list
+            entity = kbs[entity_id] # a list
             """ entity = 
             [
                 "none",
@@ -1032,7 +1032,7 @@ class WebNLGDatasetForGR(Dataset):
         mark_entity = [kbs[ele_entity][0] for ele_entity in entities] # ["none", "River Thames", "England"]
         mark_entity_number = entities # ['0', '1', '2']
         
-        text_entity, text_relation = self.get_all_entities_per_sample(mark_entity_number, mark_entity, entry) # list of str
+        text_entity, text_relation = self.get_all_entities_per_sample(mark_entity_number, mark_entity, kbs) # list of str
         # text_entity = ["Minister of Food"]
         # text_relation = ["office position or title"]
         
@@ -1074,9 +1074,8 @@ class WebNLGDatasetForGR(Dataset):
             node_ids += nodes
             edge_ids += edges
 
-        input_ids, input_attn_mask, input_node_ids, input_edge_ids = self.truncate_pair_ar(questions, add_bos_id,
-                                                                                           graph_ids, text_ids,
-                                                                                           node_ids, edge_ids)
+        input_ids_ar, attn_mask_ar, input_node_ids_ar, input_edge_ids_ar = self.truncate_pair_ar(strings_label, self.add_bos_id, self.graph_ids,
+                              self.text_ids, node_ids, edge_ids)
 
         node_length_ar = max(input_node_ids_ar) + 1
         edge_length_ar = max(input_edge_ids_ar) + 1

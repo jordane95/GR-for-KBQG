@@ -14,6 +14,7 @@ from tqdm import tqdm, trange
 import numpy as np
 import torch
 
+from torch import Tensor
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
@@ -26,18 +27,46 @@ from graph_encoder import NGRGraphEncoder
 from data_for_gr import WebNLGDatasetForGR, WebNLGDataLoader
 
 
-class Similarity(nn.Module):
+def cos_sim(a: Tensor, b: Tensor):
+    # [a, d] * [b, d] -> [a, b]
     """
-    Dot product or cosine similarity
+    Computes the cosine similarity cos_sim(a[i], b[j]) for all i and j.
+    :return: Matrix with res[i][j]  = cos_sim(a[i], b[j])
     """
+    if not isinstance(a, torch.Tensor):
+        a = torch.tensor(a)
 
-    def __init__(self, temp=1.0):
-        super().__init__()
-        self.temp = temp
-        self.cos = nn.CosineSimilarity(dim=-1)
+    if not isinstance(b, torch.Tensor):
+        b = torch.tensor(b)
 
-    def forward(self, x, y):
-        return self.cos(x, y) / self.temp
+    if len(a.shape) == 1:
+        a = a.unsqueeze(0)
+
+    if len(b.shape) == 1:
+        b = b.unsqueeze(0)
+
+    a_norm = torch.nn.functional.normalize(a, p=2, dim=1)
+    b_norm = torch.nn.functional.normalize(b, p=2, dim=1)
+    return torch.mm(a_norm, b_norm.transpose(0, 1))
+
+def dot_score(a: Tensor, b: Tensor):
+    """
+    Computes the dot-product dot_prod(a[i], b[j]) for all i and j.
+    :return: Matrix with res[i][j]  = dot_prod(a[i], b[j])
+    """
+    if not isinstance(a, torch.Tensor):
+        a = torch.tensor(a)
+
+    if not isinstance(b, torch.Tensor):
+        b = torch.tensor(b)
+
+    if len(a.shape) == 1:
+        a = a.unsqueeze(0)
+
+    if len(b.shape) == 1:
+        b = b.unsqueeze(0)
+
+    return torch.mm(a, b.transpose(0, 1))
 
 
 class BiGraphEncoder(nn.Module):
@@ -45,7 +74,7 @@ class BiGraphEncoder(nn.Module):
         super().__init__()
         self.graph_model = NGRGraphEncoder.from_pretrained(args.graph_model_name_or_path)
 
-        self.similarity = Similarity()
+        self.sim_fn = cos_sim
         self.loss_fn = nn.CrossEntropyLoss()
     
     def forward(self, batch):
@@ -71,7 +100,7 @@ class BiGraphEncoder(nn.Module):
         )
         # [batch_size, graph_emb_size]
 
-        graph_similarity = self.similarity(graph_embeddings, pos_graph_embeddings) # [batch_size, batch_size]
+        graph_similarity = self.sim_fn(graph_embeddings, pos_graph_embeddings) # [batch_size, batch_size]
         
         batch_size = graph_similarity.size(0)
         labels = torch.tensor(range(batch_size), dtype=torch.long, device=graph_similarity.device)
