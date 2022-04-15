@@ -820,7 +820,7 @@ class WebNLGDatasetForGR(Dataset):
         
         # load corpus
         self.corpus = {}
-        self.corpus_path = self.data_path.split('/')[:-1] + "/train.json"
+        self.corpus_path = "/".join(self.data_path.split('/')[:-1]) + "/train.json"
         with open(self.corpus_path, 'r') as f:
             corpus_ = json.load(f)
         for entry in corpus_:
