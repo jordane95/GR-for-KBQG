@@ -187,7 +187,7 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
             # Print loss and evaluate on the valid set
             if global_step % args.eval_period == 0:
                 model.eval()
-                curr_em = evaluate(model if args.n_gpu == 1 else model.module, dev_dataloader, tokenizer, args, logger)
+                curr_em = evaluate(model if args.n_gpu == 1 else model.module, dev_dataloader)
                 logger.info("Step %d Train loss %.2f Learning rate %.2e %s %.2f%% on epoch=%d" % (
                     global_step,
                     np.mean(train_losses),
@@ -214,7 +214,8 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
             break
 
 
-def evaluate(model, dev_dataloader, tokenizer, args, logger, save_predictions=False):
+def evaluate(model, dev_dataloader):
+    model.eval()
     neg_loss = 0
     # Inference on the test set
     for i, batch in enumerate(dev_dataloader):
@@ -222,6 +223,7 @@ def evaluate(model, dev_dataloader, tokenizer, args, logger, save_predictions=Fa
             batch = [b.to(torch.device("cuda")) for b in batch]
         loss = model(batch)
         neg_loss -= loss
+    model.train()
     return neg_loss
 
 

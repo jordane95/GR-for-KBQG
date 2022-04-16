@@ -1,6 +1,7 @@
 #!/bin/bash
 
-CUDA_VISIBLE_DEVICES=0 python train_graph_retriever.py \
+CUDA_VISIBLE_DEVICES=0,1 python train_graph_retriever.py \
+    --data_path data/wq \
     --output_dir retriever/bart_wq \
     --train_batch_size 16 \
     --predict_batch_size 32 \
