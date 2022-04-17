@@ -3,15 +3,16 @@ import os
 import logging
 import argparse
 
+from transformers import BartTokenizer
+
 from graph_encoder import GraphEncoder
 from data_for_index import WebNLGDataset, WebNLGDataLoader
 
 from faiss_retriever import BaseFaissIPRetriever
 
-import pickle
-
 import numpy as np
-import glob
+
+import torch
 
 from itertools import chain
 from tqdm import tqdm
@@ -65,6 +66,11 @@ def get_args():
     parser.add_argument('--max_node_length', type=int, default=50)
     parser.add_argument('--max_edge_length', type=int, default=60)
 
+    parser.add_argument("--train_batch_size", default=16, type=int,
+                        help="Batch size per GPU/CPU for training.")
+    parser.add_argument("--predict_batch_size", default=16, type=int,
+                        help="Batch size per GPU/CPU for evaluation.")
+
     # Retrieval related parameters
     parser.add_argument(
         "--batch_size",
@@ -97,7 +103,9 @@ def encode(model, dataloader):
     indices = []
 
     with torch.no_grad():
-        for batch in train_dataloader:
+        for batch in tqdm(dataloader, desc="Encoding"):
+            if torch.cuda.is_available():
+                batch = [b.to(torch.device("cuda")) for b in batch]
             batch_graph_embeddings = model(
                 input_ids=batch[0],
                 attention_mask=batch[1],
@@ -107,6 +115,8 @@ def encode(model, dataloader):
                 edge_length=batch[7],
                 adj_matrix=batch[8],
             ) # [batch_size, graph_emb_dim]
+
+            batch_graph_embeddings = torch.nn.functional.normalize(batch_graph_embeddings, p=2, dim=1)
 
             indices.append(batch[9].cpu())
 
@@ -139,17 +149,16 @@ def write_ranking(corpus_indices, corpus_scores, q_lookup, ranking_save_file):
 def main():
     args = get_args()
 
+    tokenizer = BartTokenizer.from_pretrained(args.tokenizer_path)
+
     train_dataset = WebNLGDataset(logger, args, os.path.join(args.data_path, "sbert_train_for_graph_retrieval"), tokenizer, "train")
     test_dataset = WebNLGDataset(logger, args, os.path.join(args.data_path, "sbert_test_for_graph_retrieval"), tokenizer, "test")
 
     train_dataloader = WebNLGDataLoader(args, train_dataset, "test")
-    test_dataloader = WebNLGDataLoader(args, dev_dataset, "test")
+    test_dataloader = WebNLGDataLoader(args, test_dataset, "test")
 
     # Load model parameters
     model = GraphEncoder.from_pretrained(args.graph_model_name_or_path)
-
-    if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
 
     if torch.cuda.is_available():
         model.to(torch.device("cuda"))
@@ -163,6 +172,7 @@ def main():
     q_reps, q_lookup = encode(model, test_dataloader)
 
     retriever = BaseFaissIPRetriever(p_reps)
+    retriever.add(p_reps)
 
     logger.info('Index Search Start')
     all_scores, psg_indices = search_queries(retriever, q_reps, p_lookup, args)
@@ -174,21 +184,28 @@ def main():
     
     for entry in test_data:
         true_idxs = entry['refs'] # List[int]
-        qid = entry['id']
+        qid = int(entry['id'])
         test_labels[qid] = true_idxs
     
-
+    precisions = []
     recalls = []
+    f1s = []
     for qid, pred_pids in zip(q_lookup, psg_indices):
         pred_pids: List[int]
         qid: int
         true_pids: List[int] = test_labels[qid]
         p = len(set(pred_pids) & set(true_pids)) / len(pred_pids)
         r = len(set(pred_pids) & set(true_pids)) / len(true_pids)
+        precisions.append(p)
         recalls.append(r)
+        f1s.append(2*p*r/(p+r+1e-7))
+    precision = sum(precisions) / len(precisions)
     recall = sum(recalls) / len(recalls)
+    f1 = sum(f1s) / len(f1s)
 
-    logger.info(f"Recall@{args.depth}: ", recall)
+    logger.info(f"Precision@{args.depth}: {precision}")
+    logger.info(f"Recall@{args.depth}: {recall}")
+    logger.info(f"F1@{args.depth}: {f1}")
 
     # write retrieved data to disk
 

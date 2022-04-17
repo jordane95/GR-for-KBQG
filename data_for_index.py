@@ -1168,7 +1168,7 @@ class WebNLGDataset(Dataset):
 
         return input_ids_ar, attn_mask_ar, decoder_label_ids, decoder_attn_mask, \
                input_node_ids_ar, input_edge_ids_ar, node_length_ar, edge_length_ar, adj_matrix_ar, \
-               entry['id']
+               torch.tensor(int(entry['id']))
 
 
 def evaluate_bleu(data_ref, data_sys):
