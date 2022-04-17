@@ -173,14 +173,15 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
 
             loss = model(batch)
 
-            train_writer.add_scalar("loss", loss.item(), global_step)
-
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
             if torch.isnan(loss).data:
                 logger.info("Stop training because loss=%s" % (loss.data))
                 stop_training = True
                 break
+            
+            train_writer.add_scalar("loss", loss.item(), global_step)
+            
             train_losses.append(loss.detach().cpu())
             loss.backward()
 
