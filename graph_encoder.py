@@ -6,7 +6,7 @@ from transformers.configuration_bart import BartConfig
 from modeling_bart import PretrainedBartModel, BartStructureEncoder, _filter_out_falsey_values
 
 
-class NGRGraphEncoder(PretrainedBartModel):
+class GraphEncoder(PretrainedBartModel):
     def __init__(self, config: BartConfig):
         super().__init__(config)
 

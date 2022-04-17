@@ -22,62 +22,20 @@ from transformers import AdamW, get_linear_schedule_with_warmup
 
 from transformers import BartTokenizer
 
-from graph_encoder import NGRGraphEncoder
+from graph_encoder import GraphEncoder
 
 from data_for_gr import WebNLGDatasetForGR, WebNLGDataLoader
 
+from util import cos_sim
+
 from tensorboardX import SummaryWriter
 
-train_writer = SummaryWriter("log/train")
-dev_writer = SummaryWriter("log/dev")
-
-
-def cos_sim(a: Tensor, b: Tensor):
-    # [a, d] * [b, d] -> [a, b]
-    """
-    Computes the cosine similarity cos_sim(a[i], b[j]) for all i and j.
-    :return: Matrix with res[i][j]  = cos_sim(a[i], b[j])
-    """
-    if not isinstance(a, torch.Tensor):
-        a = torch.tensor(a)
-
-    if not isinstance(b, torch.Tensor):
-        b = torch.tensor(b)
-
-    if len(a.shape) == 1:
-        a = a.unsqueeze(0)
-
-    if len(b.shape) == 1:
-        b = b.unsqueeze(0)
-
-    a_norm = torch.nn.functional.normalize(a, p=2, dim=1)
-    b_norm = torch.nn.functional.normalize(b, p=2, dim=1)
-    return torch.mm(a_norm, b_norm.transpose(0, 1))
-
-def dot_score(a: Tensor, b: Tensor):
-    """
-    Computes the dot-product dot_prod(a[i], b[j]) for all i and j.
-    :return: Matrix with res[i][j]  = dot_prod(a[i], b[j])
-    """
-    if not isinstance(a, torch.Tensor):
-        a = torch.tensor(a)
-
-    if not isinstance(b, torch.Tensor):
-        b = torch.tensor(b)
-
-    if len(a.shape) == 1:
-        a = a.unsqueeze(0)
-
-    if len(b.shape) == 1:
-        b = b.unsqueeze(0)
-
-    return torch.mm(a, b.transpose(0, 1))
 
 
 class BiGraphEncoder(nn.Module):
     def __init__(self, args):
         super().__init__()
-        self.graph_model = NGRGraphEncoder.from_pretrained(args.graph_model_name_or_path)
+        self.graph_model = GraphEncoder.from_pretrained(args.graph_model_name_or_path)
 
         self.sim_fn = cos_sim
         self.loss_fn = nn.CrossEntropyLoss()
@@ -159,6 +117,9 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
     best_accuracy = -99999999
     stop_training = False
 
+    train_writer = SummaryWriter(os.path.join('log', args.data_path, 'train'))
+    dev_writer = SummaryWriter(os.path.join('log', args.data_path, 'dev'))
+
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch")
     logger.info("Starting training!")
     for epoch in train_iterator:
@@ -181,7 +142,8 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
                 break
             
             train_writer.add_scalar("loss", loss.item(), global_step)
-            
+            train_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
+
             train_losses.append(loss.detach().cpu())
             loss.backward()
 
@@ -249,24 +211,12 @@ def main():
         help="Path to the dataset."
     )
     parser.add_argument("--output_dir", default=None, type=str, required=True)
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=1.0,
-        help="Temperature in contrastive loss."
-    )
     # Model parameters
     parser.add_argument(
         "--graph_model_name_or_path",
         type=str,
         default="pretrain_model/jointgt_bart",
         help="Path to the pretrained graph encoder model."
-    )
-    parser.add_argument(
-        "--sentence_model_name_or_path",
-        type=str,
-        default="bert-base-nli-mean-tokens",
-        help="Name on huggingface or path to pretrained sentence encoder."
     )
     parser.add_argument(
         "--tokenizer_path",
