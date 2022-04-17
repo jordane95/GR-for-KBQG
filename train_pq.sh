@@ -4,7 +4,7 @@ CUDA_VISIBLE_DEVICES=0,1 python train_graph_retriever.py \
     --data_path data/pq \
     --output_dir retriever/bart_pq \
     --train_batch_size 16 \
-    --predict_batch_size 32 \
+    --predict_batch_size 16 \
     --max_input_length 256 \
     --max_output_length 128 \
     --append_another_bos \

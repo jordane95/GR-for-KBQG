@@ -26,6 +26,11 @@ from graph_encoder import NGRGraphEncoder
 
 from data_for_gr import WebNLGDatasetForGR, WebNLGDataLoader
 
+from tensorboardX import SummaryWriter
+
+train_writer = SummaryWriter("log/train")
+dev_writer = SummaryWriter("log/dev")
+
 
 def cos_sim(a: Tensor, b: Tensor):
     # [a, d] * [b, d] -> [a, b]
@@ -168,6 +173,8 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
 
             loss = model(batch)
 
+            train_writer.add_scalar("loss", loss.item(), global_step)
+
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
             if torch.isnan(loss).data:
@@ -188,16 +195,17 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
             if global_step % args.eval_period == 0:
                 model.eval()
                 curr_em = evaluate(model if args.n_gpu == 1 else model.module, dev_dataloader)
-                logger.info("Step %d Train loss %.2f Learning rate %.2e %s %.2f%% on epoch=%d" % (
+                dev_writer.add_scalar("loss", -curr_em, global_step)
+                logger.info("Step %d Train loss %.2f Learning rate %.2e %s %.2f on epoch=%d" % (
                     global_step,
                     np.mean(train_losses),
                     scheduler.get_lr()[0],
-                    dev_dataloader.dataset.metric,
-                    curr_em * 100,
+                    "NCE loss",
+                    curr_em,
                     epoch))
                 train_losses = []
                 if best_accuracy < curr_em:
-                    model_to_save = model.module if hasattr(model, 'module') else model
+                    model_to_save = model.graph_model.module if hasattr(model.graph_model, 'module') else model.graph_model
                     model_to_save.save_pretrained(args.output_dir)
                     logger.info("Saving model with best %s: %.2f%% -> %.2f%% on epoch=%d, global_step=%d" %
                                 (dev_dataloader.dataset.metric, best_accuracy * 100.0, curr_em * 100.0, epoch, global_step))
@@ -213,18 +221,20 @@ def train(args, logger, model, train_dataloader, dev_dataloader, optimizer, sche
         if stop_training:
             break
 
-
+@torch.no_grad()
 def evaluate(model, dev_dataloader):
     model.eval()
     neg_loss = 0
     # Inference on the test set
+    count = 0
     for i, batch in enumerate(dev_dataloader):
         if torch.cuda.is_available():
             batch = [b.to(torch.device("cuda")) for b in batch]
         loss = model(batch)
-        neg_loss -= loss
+        neg_loss -= loss.item()
+        count += 1
     model.train()
-    return neg_loss
+    return neg_loss / count
 
 
 def main():
