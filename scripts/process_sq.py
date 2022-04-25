@@ -1,8 +1,5 @@
 import json
 
-TRAIN_FILE = 'annotated_fb_data_train.txt'
-VALID_FILE = 'annotated_fb_data_valid.txt'
-TEST_FILE = 'annotated_fb_data_test.txt'
 
 def load_mid2name(filename: str):
     mid2name = {}
