@@ -5,10 +5,10 @@ def load_mid2name(filename: str):
     mid2name = {}
     with open(filename, 'r') as f:
         for line in f:
-            datas = line.strip().split('\t')
-            if len(datas) != 2:
+            data = line.strip().split('\t')
+            if len(data) != 2:
                 continue
-            mid, name = datas
+            mid, name = data
             mid2name[mid] = name
     return mid2name
 
@@ -21,9 +21,11 @@ def convert_ids_to_names(src: str, tgt: str, mid2name):
             head, relation, tail, question = line.strip().split('\t')
             head_mid = '/'.join([""] + head.split('/')[1:])
             tail_mid = '/'.join([""] + tail.split('/')[1:])
-            relation_name = " ".join(relation.split('/')[-1].split('_'))
+
+            relation_name = " ".join(sum([rel.split('_') for rel in relation.split('/')[1:]], []))
             head_name = mid2name[head_mid] if head_mid in mid2name else 'none'
             tail_name = mid2name[tail_mid] if tail_mid in mid2name else 'none'
+            
             sample = {
                 "id": qid,
                 "kbs": {
