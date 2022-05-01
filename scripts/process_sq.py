@@ -46,10 +46,8 @@ def load_mid2name(filename: str):
             if len(items) != 3:
                 continue
             mid, type, name= items
-            if mid not in mid2name:
-                mid2name[mid] = [name]
-            else:
-                mid2name[mid].append(name)
+            if type == 'fb:type.object.name':
+                mid2name[mid] = name
     return mid2name
 
 
@@ -67,8 +65,8 @@ def convert_ids_to_names(src: str, tgt: str, mid2name):
             tail_mid = www2fb(tail)
 
             relation_name = " ".join(sum([rel.split('_') for rel in relation.split('/')[1:]], []))
-            head_name = mid2name[head_mid][0] if head_mid in mid2name else 'none'
-            tail_name = mid2name[tail_mid][0] if tail_mid in mid2name else 'none'
+            head_name = mid2name[head_mid] if head_mid in mid2name else 'none'
+            tail_name = mid2name[tail_mid] if tail_mid in mid2name else 'none'
             
             sample = {
                 "id": qid,
