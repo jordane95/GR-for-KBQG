@@ -1,6 +1,7 @@
 from tqdm import tqdm
 import json
 
+
 def www2fb(in_str):
     if in_str.startswith("www.freebase.com"):
         in_str = 'fb:%s' % (in_str.split('www.freebase.com/')[-1].replace('/', '.'))
@@ -50,6 +51,7 @@ def load_mid2name(filename: str):
                 mid2name[mid] = name
     return mid2name
 
+
 def load_mid_to_type(path: str):
     """Load mid to type mid mapping from path
 
@@ -64,7 +66,7 @@ def load_mid_to_type(path: str):
             head_url, relation, tail_url = line.strip().split('\t')
             head_fb_mid = www2fb(head_url)
             tail_fb_mid = www2fb(tail_url)
-            if 'topic/notable_types' in realtion:
+            if 'topic/notable_types' in relation:
                 mid2typemid[head_fb_mid] = tail_fb_mid
     print(f"Loaded type entity for {len(mid2typemid)} entities.")
     return mid2typemid
