@@ -1,4 +1,4 @@
-import tqdm
+from tqdm import tqdm
 import json
 
 def www2fb(in_str):
@@ -88,12 +88,14 @@ def convert_ids_to_names(src: str, tgt: str, mid2name, mid2typemid):
             tail_name = mid2name[tail_mid] if tail_mid in mid2name else 'none'
 
             if head_mid in mid2typemid and mid2typemid[head_mid] in mid2name:
-                head_name += " "
+                head_name += " ( "
                 head_name += mid2name[mid2typemid[head_mid]]
+                head_name += " ) "
             
             if tail_mid in mid2typemid and mid2typemid[tail_mid] in mid2name:
-                tail += " "
+                tail_name += " ( "
                 tail_name += mid2name[mid2typemid[tail_mid]]
+                tail_name += " ) "
             
             sample = {
                 "id": qid,
@@ -129,6 +131,6 @@ def convert_ids_to_names(src: str, tgt: str, mid2name, mid2typemid):
 if __name__ == "__main__":
     mid2typemid = load_mid_to_type('freebase-subsets/freebase-FB5M.txt')
     mid2name = load_mid2name('names.trimmed.2M.txt')
-    convert_ids_to_names('annotated_fb_data_train.txt', 'train.json', mid2name)
-    convert_ids_to_names('annotated_fb_data_valid.txt', 'dev.json', mid2name)
-    convert_ids_to_names('annotated_fb_data_test.txt', 'test.json', mid2name)
+    convert_ids_to_names('annotated_fb_data_train.txt', 'train.json', mid2name, mid2typemid)
+    convert_ids_to_names('annotated_fb_data_valid.txt', 'dev.json', mid2name, mid2typemid)
+    convert_ids_to_names('annotated_fb_data_test.txt', 'test.json', mid2name, mid2typemid)
